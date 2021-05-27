@@ -102,7 +102,7 @@ struct ak09970_digital_hall_data {
 };
 static struct ak09970_digital_hall_data *pdata;
 
-void init_digital_hall_data(void)
+void init_digital_hall_data()
 {
 	int i;
 
@@ -1145,7 +1145,7 @@ static void print_sensor_dump(struct adsp_data *data, int sensor)
 	}
 }
 
-void print_ssr_history(void)
+void print_ssr_history()
 {
 	int i;
 

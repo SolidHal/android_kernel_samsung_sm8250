@@ -40,7 +40,6 @@
 #include <linux/string.h>
 #include <linux/reboot.h>
 #include <linux/sec_displayport.h>
-#include <linux/sched/clock.h>
 #ifdef CONFIG_SEC_DISPLAYPORT_BIGDATA
 #include <linux/displayport_bigdata.h>
 #endif
@@ -2567,8 +2566,8 @@ attention:
 
 handle_hpd_high:
 	/* hpd high: do the same with: dp_display_usbpd_attention_cb */
-	DP_INFO("connected:%d\n", dp_display_state_is(DP_STATE_CONNECTED));
-	if (!dp_display_state_is(DP_STATE_CONNECTED)) {
+	DP_INFO("power_on:%d\n", dp_display_state_is(DP_STATE_ENABLED));
+	if (!dp_display_state_is(DP_STATE_ENABLED)) {
 		secdp_clear_link_status_update_cnt(dp->link);
 		dp_display_state_remove(DP_STATE_ABORTED);
 		queue_work(dp->wq, &dp->connect_work);
@@ -4588,13 +4587,8 @@ static bool secdp_check_supported_resolution(struct dp_display_private *dp,
 				ret = true;
 		}
 
-		/* fail safe at dex mode */
-		if (!ret && (secdp_timing[i].index == 0/*640x480*/ ||
-				secdp_timing[i].index == 1/*720x480*/))
-			ret = true;
-
 #ifndef SECDP_IGNORE_PREFER_IF_DEX_RES_EXIST
-		if (ret && !sec->has_prefer) {
+		if (ret) {
 #else
 		if (ret && !secdp_check_dex_ratio(sec->prefer_ratio)) {
 #endif

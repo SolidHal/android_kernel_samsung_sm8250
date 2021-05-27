@@ -1,7 +1,7 @@
 /*
  * Linux cfgp2p driver
  *
- * Copyright (C) 2021, Broadcom.
+ * Copyright (C) 2020, Broadcom.
  *
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -1558,6 +1558,7 @@ wl_cfgp2p_discover_listen(struct bcm_cfg80211 *cfg, s32 channel, u32 duration_ms
 {
 #define EXTRA_DELAY_TIME	100
 	s32 ret = BCME_OK;
+	timer_list_compat_t *_timer;
 	s32 extra_delay;
 	struct net_device *netdev = bcmcfg_to_prmry_ndev(cfg);
 
@@ -1582,6 +1583,7 @@ wl_cfgp2p_discover_listen(struct bcm_cfg80211 *cfg, s32 channel, u32 duration_ms
 
 	ret = wl_cfgp2p_set_p2p_mode(cfg, WL_P2P_DISC_ST_LISTEN, channel, (u16) duration_ms,
 	            wl_to_p2p_bss_bssidx(cfg, P2PAPI_BSSCFG_DEVICE));
+	_timer = &cfg->p2p->listen_timer;
 
 	/*  We will wait to receive WLC_E_P2P_DISC_LISTEN_COMPLETE from dongle ,
 	 *  otherwise we will wait up to duration_ms + 100ms + duration / 10
@@ -1594,7 +1596,7 @@ wl_cfgp2p_discover_listen(struct bcm_cfg80211 *cfg, s32 channel, u32 duration_ms
 		extra_delay = 0;
 	}
 
-	mod_timer(&cfg->p2p->listen_timer, jiffies + msecs_to_jiffies(duration_ms + extra_delay));
+	INIT_TIMER(_timer, wl_cfgp2p_listen_expired, duration_ms, extra_delay);
 #ifdef WL_CFG80211_VSDB_PRIORITIZE_SCAN_REQUEST
 	wl_clr_p2p_status(cfg, LISTEN_EXPIRED);
 #endif /* WL_CFG80211_VSDB_PRIORITIZE_SCAN_REQUEST */
@@ -1688,9 +1690,8 @@ wl_cfgp2p_action_tx_complete(struct bcm_cfg80211 *cfg, bcm_struct_cfgdev *cfgdev
 }
 
 #define ETHER_LOCAL_ADDR 0x02
-static s32
-wl_actframe_fillup_v2(struct bcm_cfg80211 *cfg, bcm_struct_cfgdev *cfgdev,
-	struct net_device *dev, wl_af_params_v2_t *af_params_v2_p,
+s32
+wl_actframe_fillup_v2(struct net_device *dev, wl_af_params_v2_t *af_params_v2_p,
 	wl_af_params_t *af_params, const u8 *sa, uint16 wl_af_params_size)
 {
 	s32 err = 0;
@@ -1718,16 +1719,13 @@ wl_actframe_fillup_v2(struct bcm_cfg80211 *cfg, bcm_struct_cfgdev *cfgdev,
 	}
 	/* check if local admin bit is set and addr is different from ndev addr */
 	if ((sa[0] & ETHER_LOCAL_ADDR) &&
-		(cfgdev->iftype == NL80211_IFTYPE_STATION) &&
-		memcmp(sa, dev->dev_addr, ETH_ALEN)) {
+			memcmp(sa, dev->dev_addr, ETH_ALEN)) {
 		/* Use mask to avoid randomization, as the address from supplicant
 		 * is already randomized.
 		 */
 		eacopy(sa, &action_frame_v2_p->rand_mac_addr);
 		action_frame_v2_p->rand_mac_mask = rand_mac_mask;
 		action_frame_v2_p->flags |= WL_RAND_GAS_MAC;
-		eacopy(sa, &cfg->af_randmac);
-		cfg->randomized_gas_tx = TRUE;
 	}
 	return err;
 }
@@ -1741,8 +1739,8 @@ wl_actframe_fillup_v2(struct bcm_cfg80211 *cfg, bcm_struct_cfgdev *cfgdev,
  * 802.11 ack has been received for the sent action frame.
  */
 s32
-wl_cfgp2p_tx_action_frame(struct bcm_cfg80211 *cfg, bcm_struct_cfgdev *cfgdev,
-	struct net_device *dev, wl_af_params_t *af_params, s32 bssidx, const u8 *sa)
+wl_cfgp2p_tx_action_frame(struct bcm_cfg80211 *cfg, struct net_device *dev,
+	wl_af_params_t *af_params, s32 bssidx, const u8 *sa)
 {
 	s32 ret = BCME_OK;
 	s32 evt_ret = BCME_OK;
@@ -1786,7 +1784,7 @@ wl_cfgp2p_tx_action_frame(struct bcm_cfg80211 *cfg, bcm_struct_cfgdev *cfgdev,
 				ret = -ENOMEM;
 				goto exit;
 			}
-			ret = wl_actframe_fillup_v2(cfg, cfgdev, dev, af_params_v2_p, af_params, sa,
+			ret = wl_actframe_fillup_v2(dev, af_params_v2_p, af_params, sa,
 					wl_af_params_size);
 			if (ret != BCME_OK) {
 				WL_ERR(("unable to fill actframe_params, ret %d\n", ret));
